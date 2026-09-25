@@ -1,0 +1,72 @@
+# Haber Analiz
+
+Yunanistan ve İsrail'de yayın yapan kaynaklardan Türkiye ile ilgili haberleri düzenli olarak bulan, Türkçe olarak yeniden yazan, kategorileyen ve arşivleyen web sitesi.
+
+Gereksinimler: [docs/gereksinimler.md](docs/gereksinimler.md)
+
+## Nasıl çalışır
+
+1. **Toplama:** Saatte bir (veya panelden "Şimdi tara" ile) tüm aktif kaynakların RSS beslemeleri okunur, yeni haberlerin metni sayfadan ayıklanır. Daha önce görülen haberler atlanır.
+2. **Ön eleme:** Başlık ve metinde Yunanca, İbranice ve İngilizce anahtar kelimeler aranır (Türkiye, Erdoğan, Ankara, Ege…). Eşleşmeyen haberler yapay zekâya hiç gönderilmez.
+3. **İlgi kontrolü:** Ucuz model (Claude Haiku 4.5) haberin gerçekten Türkiye ile ilgili olup olmadığına karar verir ve kategori atar.
+4. **Kategori seçimi:** Panelde kapatılan kategorilerdeki haberler Türkçeleştirilmez.
+5. **Türkçeleştirme:** Güçlü model (Claude Sonnet 5) haberi birebir çevirmeden, kendi cümleleriyle geniş bir Türkçe özet, önemli noktalar ve etiketler olarak yeniden yazar.
+6. **Yayın:** Sitede solda orijinal başlık, kısa alıntı ve kaynak linki; sağda Türkçe özet gösterilir. Tam orijinal metin yalnızca veritabanında tutulur, sitede gösterilmez.
+
+**Bütçe:** Her yapay zekâ çağrısının maliyeti kaydedilir. Aylık sınıra (varsayılan 50 €, bunun 10 €'su sunucuya ayrılır) ulaşıldığında haberler toplanmaya devam eder, Türkçeleştirme bir sonraki ay kaldığı yerden sürer.
+
+## Yerelde çalıştırma
+
+Gerekenler: [Docker Desktop](https://www.docker.com/products/docker-desktop/) ve bir [Anthropic API anahtarı](https://console.anthropic.com).
+
+```bash
+cp .env.example .env      # ANTHROPIC_API_KEY ve ADMIN_PASSWORD değerlerini doldurun
+docker compose up --build
+```
+
+- Site: http://localhost:3000
+- Yönetim paneli: http://localhost:3000/yonetim (şifre: `.env` içindeki `ADMIN_PASSWORD`)
+- API belgeleri: http://localhost:8000/docs
+
+İlk açılışta örnek kaynaklar ve kategoriler otomatik eklenir. İlk sonuçları görmek için panelden **Şimdi tara** düğmesine basın.
+
+> Örnek kaynakların RSS adresleri geliştirme ortamından doğrulanamadı. Bir adres çalışmazsa panelde "Son hata" sütununda görünür; o kaynağı kapatıp doğru adresle yeniden ekleyebilirsiniz.
+
+## Yönetim paneli
+
+- **Şimdi tara / Durdur / Devam ettir:** Manuel tarama ve otomatik taramayı durdurma.
+- **Bütçe:** Bu ayki yapay zekâ harcaması ve sınır.
+- **Taranacak kategoriler:** Hangi kategorilerin yayınlanacağını seçme.
+- **Kaynaklar:** Kaynak ekleme, kapatma, son hata durumunu görme.
+- **Son taramalar:** Her taramada kaç yeni aday bulunduğu, kaç haberin yayınlandığı.
+
+## Geliştirme
+
+```bash
+# Arka uç
+cd backend
+python -m venv .venv && . .venv/bin/activate
+pip install -r requirements.txt
+pytest
+
+# Web sitesi
+cd frontend
+npm install
+API_URL=http://localhost:8000 npm run dev
+```
+
+| Dosya | İçerik |
+|---|---|
+| `backend/app/collector.py` | RSS okuma ve metin ayıklama |
+| `backend/app/keywords.py` | Çok dilli anahtar kelime ön elemesi |
+| `backend/app/ai.py` | Claude ile ilgi kontrolü ve Türkçe yeniden yazım |
+| `backend/app/pipeline.py` | Tarama akışı |
+| `backend/app/budget.py` | Maliyet hesabı ve aylık sınır |
+| `backend/app/main.py` | API uçları |
+| `frontend/app` | Haber listesi, haber sayfası, yönetim paneli |
+
+## Sonraki aşamalar
+
+- Sunucuya taşıma (Docker Compose ile aynı kurulum) ve alan adı
+- Yunanistan ve İsrail'den erişimi engelleme (Cloudflare ülke kuralları)
+- Sosyal medya kaynakları (resmi kurumlar, yüksek etkileşimli hesaplar)
