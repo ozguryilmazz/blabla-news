@@ -66,6 +66,7 @@ class ArticleDetail(BaseModel):
     summary_tr: str | None
     key_points_tr: list[str]
     tags: list[str]
+    translator: str | None
     source: SourcePublic
     category: CategoryOut | None
 
@@ -93,6 +94,7 @@ class AdminStatus(BaseModel):
     paused: bool
     scan_running: bool
     interval_minutes: int
+    translator: str
     budget: dict
     counts: dict[str, int]
     recent_runs: list[ScanRunOut]

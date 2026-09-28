@@ -128,6 +128,7 @@ def process_pending(session: Session, ai, run: ScanRun) -> None:
                 article.summary_tr = rewrite.summary_tr
                 article.key_points_tr = "\n".join(rewrite.key_points)
                 article.tags = ", ".join(rewrite.tags)
+                article.translator = getattr(ai, "name", None)
                 article.status = "published"
                 run.published += 1
         except AIFatalError as exc:

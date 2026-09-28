@@ -13,11 +13,13 @@ Gereksinimler: [docs/gereksinimler.md](docs/gereksinimler.md)
 5. **Türkçeleştirme:** Güçlü model (Claude Sonnet 5) haberi birebir çevirmeden, kendi cümleleriyle geniş bir Türkçe özet, önemli noktalar ve etiketler olarak yeniden yazar.
 6. **Yayın:** Sitede solda orijinal başlık, kısa alıntı ve kaynak linki; sağda Türkçe özet gösterilir. Tam orijinal metin yalnızca veritabanında tutulur, sitede gösterilmez.
 
+**Ücretsiz mod:** `ANTHROPIC_API_KEY` boşsa sistem otomatik olarak ücretsiz yönteme geçer. İlgi ve kategori anahtar kelimelerle belirlenir, başlık ve haberin giriş paragrafları Google Translate ile Türkçeye çevrilir. Özet ve önemli noktalar üretilmez; sitede "makine çevirisi" notu görünür. Anahtar eklenip sistem yeniden başlatıldığında Claude'a geri dönülür. `TRANSLATOR=free` ile anahtar olsa bile ücretsiz mod zorlanabilir.
+
 **Bütçe:** Her yapay zekâ çağrısının maliyeti kaydedilir. Aylık sınıra (varsayılan 50 €, bunun 10 €'su sunucuya ayrılır) ulaşıldığında haberler toplanmaya devam eder, Türkçeleştirme bir sonraki ay kaldığı yerden sürer.
 
 ## Yerelde çalıştırma
 
-Gerekenler: [Docker Desktop](https://www.docker.com/products/docker-desktop/) ve bir [Anthropic API anahtarı](https://console.anthropic.com).
+Gerekenler: [Docker Desktop](https://www.docker.com/products/docker-desktop/). [Anthropic API anahtarı](https://console.anthropic.com) isteğe bağlıdır; yoksa ücretsiz çeviri kullanılır.
 
 ```bash
 cp .env.example .env      # ANTHROPIC_API_KEY ve ADMIN_PASSWORD değerlerini doldurun

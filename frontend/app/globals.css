@@ -88,3 +88,4 @@ th, td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--bord
 tr.inactive { opacity: 0.5; }
 .add-source { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
 .add-source input[name="url"] { flex: 1 1 260px; }
+.small { font-size: 0.85rem; }

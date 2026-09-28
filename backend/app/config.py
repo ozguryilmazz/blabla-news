@@ -10,6 +10,9 @@ class Settings(BaseSettings):
     anthropic_api_key: str = ""
     admin_password: str = "degistir-beni"
 
+    # Çeviri yöntemi: auto (anahtar varsa Claude, yoksa ücretsiz) | claude | free
+    translator: str = "auto"
+
     # Modeller: ucuz ayıklama + kaliteli Türkçeleştirme
     relevance_model: str = "claude-haiku-4-5"
     rewrite_model: str = "claude-sonnet-5"

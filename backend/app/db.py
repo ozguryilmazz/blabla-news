@@ -43,3 +43,17 @@ def get_session() -> Iterator[Session]:
         yield session
     finally:
         session.close()
+
+
+# create_all mevcut tablolara sütun eklemez; sonradan eklenen sütunlar burada tamamlanır
+_ADDED_COLUMNS = [("articles", "translator", "VARCHAR(20)")]
+
+
+def upgrade_schema(engine) -> None:
+    if engine.dialect.name != "postgresql":
+        return
+    from sqlalchemy import text
+
+    with engine.begin() as conn:
+        for table, column, sql_type in _ADDED_COLUMNS:
+            conn.execute(text(f"ALTER TABLE {table} ADD COLUMN IF NOT EXISTS {column} {sql_type}"))

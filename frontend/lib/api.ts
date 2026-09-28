@@ -27,6 +27,7 @@ export type ArticleDetail = {
   summary_tr: string | null;
   key_points_tr: string[];
   tags: string[];
+  translator: "claude" | "free" | null;
   source: Source;
   category: Category | null;
 };

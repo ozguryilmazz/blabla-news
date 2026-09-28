@@ -41,7 +41,7 @@ export default async function ArticlePage({ params }: { params: Promise<{ id: st
         </section>
 
         <section className="pane pane-tr" lang="tr">
-          <h3 className="pane-label">Türkçe özet</h3>
+          <h3 className="pane-label">{a.translator === "free" ? "Türkçe çeviri (giriş bölümü)" : "Türkçe özet"}</h3>
           <h1>{a.title_tr}</h1>
           {a.summary_tr?.split("\n").filter(Boolean).map((para, i) => <p key={i}>{para}</p>)}
           {a.key_points_tr.length > 0 && (
@@ -49,6 +49,9 @@ export default async function ArticlePage({ params }: { params: Promise<{ id: st
               <h4>Öne çıkanlar</h4>
               <ul>{a.key_points_tr.map((p, i) => <li key={i}>{p}</li>)}</ul>
             </>
+          )}
+          {a.translator === "free" && (
+            <p className="muted small">Bu metin otomatik makine çevirisidir (Google Translate).</p>
           )}
           {a.tags.length > 0 && (
             <div className="tags">

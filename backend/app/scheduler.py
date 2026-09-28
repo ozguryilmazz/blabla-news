@@ -3,7 +3,7 @@ import threading
 
 from apscheduler.schedulers.background import BackgroundScheduler
 
-from .ai import ClaudeAI
+from .ai import build_translator
 from .collector import HttpFetcher
 from .config import get_settings
 from .db import session_factory
@@ -13,7 +13,7 @@ log = logging.getLogger(__name__)
 
 
 def _scan(trigger: str) -> None:
-    run = run_scan(session_factory, HttpFetcher(), ClaudeAI(), trigger=trigger)
+    run = run_scan(session_factory, HttpFetcher(), build_translator(), trigger=trigger)
     if run is None:
         log.info("Tarama zaten sürüyor, atlandı (%s)", trigger)
 

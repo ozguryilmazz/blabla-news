@@ -58,6 +58,7 @@ class Article(Base):
     summary_tr: Mapped[str | None] = mapped_column(Text)
     key_points_tr: Mapped[str | None] = mapped_column(Text)  # satır satır
     tags: Mapped[str | None] = mapped_column(Text)  # virgülle ayrılmış
+    translator: Mapped[str | None] = mapped_column(String(20))  # claude | free
 
     category_id: Mapped[int | None] = mapped_column(ForeignKey("categories.id"), index=True)
 

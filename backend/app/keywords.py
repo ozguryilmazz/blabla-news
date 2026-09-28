@@ -54,3 +54,8 @@ def matched_keywords(*texts: str | None) -> list[str]:
 
 def is_candidate(*texts: str | None) -> bool:
     return bool(matched_keywords(*texts))
+
+
+def count_occurrences(*texts: str | None) -> int:
+    haystack = normalize(" ".join(t for t in texts if t))
+    return sum(haystack.count(k) for k in ALL_KEYWORDS)

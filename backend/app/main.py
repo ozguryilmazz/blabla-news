@@ -10,7 +10,8 @@ from sqlalchemy.orm import Session
 from . import pipeline
 from .budget import budget_status
 from .config import get_settings
-from .db import Base, get_engine, get_session, session_factory
+from .ai import active_translator_name
+from .db import Base, get_engine, get_session, session_factory, upgrade_schema
 from .models import Article, Category, ScanRun, Source
 from .schemas import (
     AdminStatus,
@@ -33,6 +34,7 @@ logging.basicConfig(level=logging.INFO)
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     Base.metadata.create_all(get_engine())
+    upgrade_schema(get_engine())
     session = session_factory()
     try:
         seed(session)
@@ -139,6 +141,7 @@ def get_article(article_id: int, session: Session = Depends(get_session)):
         summary_tr=a.summary_tr,
         key_points_tr=[p for p in (a.key_points_tr or "").split("\n") if p.strip()],
         tags=[t.strip() for t in (a.tags or "").split(",") if t.strip()],
+        translator=a.translator,
         source=SourcePublic.model_validate(a.source),
         category=CategoryOut.model_validate(a.category) if a.category else None,
     )
@@ -165,6 +168,7 @@ def admin_status(session: Session = Depends(get_session)):
         paused=pipeline.is_paused(session),
         scan_running=pipeline.scan_running(),
         interval_minutes=get_settings().scan_interval_minutes,
+        translator=active_translator_name(),
         budget=budget_status(session),
         counts=counts,
         recent_runs=[ScanRunOut.model_validate(r) for r in runs],

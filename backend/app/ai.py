@@ -85,6 +85,8 @@ MISSING_KEY_MESSAGE = (
 
 
 class ClaudeAI:
+    name = "claude"
+
     def __init__(self, client: anthropic.Anthropic | None = None):
         s = get_settings()
         self._has_key = client is not None or bool(s.anthropic_api_key.strip())
@@ -153,3 +155,19 @@ class ClaudeAI:
             thinking={"type": "disabled"},
         )
         return RewriteResult(out.title_tr, out.summary_tr, out.key_points, out.tags, usage)
+
+
+def active_translator_name() -> str:
+    s = get_settings()
+    choice = s.translator.strip().lower()
+    if choice in ("claude", "free"):
+        return choice
+    return "claude" if s.anthropic_api_key.strip() else "free"
+
+
+def build_translator():
+    if active_translator_name() == "claude":
+        return ClaudeAI()
+    from .free_translate import FreeTranslator
+
+    return FreeTranslator()

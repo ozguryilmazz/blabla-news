@@ -4,7 +4,7 @@ import { FormEvent, useCallback, useEffect, useState } from "react";
 
 type Budget = { ai_budget_eur: number; ai_spent_eur: number; monthly_budget_eur: number; server_cost_eur: number; ratio: number; warning: boolean; exhausted: boolean };
 type Run = { id: number; started_at: string; finished_at: string | null; trigger: string; new_items: number; published: number; errors: number; note: string | null };
-type Status = { paused: boolean; scan_running: boolean; interval_minutes: number; budget: Budget; counts: Record<string, number>; recent_runs: Run[] };
+type Status = { paused: boolean; scan_running: boolean; interval_minutes: number; translator: "claude" | "free"; budget: Budget; counts: Record<string, number>; recent_runs: Run[] };
 type AdminSource = { id: number; name: string; country: string; language: string; url: string; active: boolean; last_checked_at: string | null; last_error: string | null };
 type Category = { id: number; slug: string; name: string; scan_enabled: boolean };
 
@@ -136,6 +136,13 @@ export default function AdminPage() {
         <p>
           Otomatik tarama: <strong>{status?.paused ? "Durduruldu" : `Açık (${status?.interval_minutes} dakikada bir)`}</strong>
           {status?.scan_running && <span className="chip">Tarama sürüyor…</span>}
+        </p>
+        <p>
+          Çeviri yöntemi:{" "}
+          <strong>{status?.translator === "claude" ? "Claude (özet ve yeniden yazım)" : "Ücretsiz (Google Translate, makine çevirisi)"}</strong>
+          {status?.translator === "free" && (
+            <span className="muted"> · Claude'a geçmek için .env dosyasına ANTHROPIC_API_KEY ekleyip sistemi yeniden başlatın.</span>
+          )}
         </p>
         <div className="actions">
           <button disabled={status?.scan_running} onClick={() => run(() => call("/api/admin/scan", { method: "POST" }), "Tarama başlatıldı")}>Şimdi tara</button>
