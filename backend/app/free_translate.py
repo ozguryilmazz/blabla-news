@@ -2,11 +2,17 @@
 
 - İlgi kontrolü: anahtar kelime eşleşmesiyle (başlıkta geçiyorsa veya metinde en az iki kez geçiyorsa ilgili)
 - Kategori: çok dilli kelime kurallarıyla
-- Çeviri: Google Translate'in herkese açık ücretsiz uç noktası; başlık ve haberin ilk paragrafları çevrilir
+- Çeviri: başlık ve haberin ilk paragrafları sırayla şu ücretsiz servislerle çevrilir:
+  isteğe bağlı kendi LibreTranslate sunucunuz → Google Translate → MyMemory.
+  Sınırına takılan servis o tarama boyunca atlanır; hepsi dolarsa haberler bekler.
 
 Claude yöntemiyle aynı arayüzü (check_relevance, rewrite) sunar, bu yüzden tarama akışı değişmez.
 Kalite Claude kadar iyi değildir: birebir makine çevirisidir, özet ve önemli noktalar üretilmez.
 """
+
+import logging
+import re
+import time
 
 import httpx
 
@@ -14,9 +20,11 @@ from . import keywords
 from .ai import AIError, AIFatalError, RelevanceResult, RewriteResult
 from .config import get_settings
 
+log = logging.getLogger(__name__)
+
 GOOGLE_URL = "https://translate.googleapis.com/translate_a/single"
+MYMEMORY_URL = "https://api.mymemory.translated.net/get"
 LEAD_CHARS = 1500  # telif için haberin yalnızca giriş kısmı çevrilir
-CHUNK_CHARS = 1800
 
 # Sıra önemli: daha özel kategoriler önce denenir
 CATEGORY_RULES: list[tuple[str, list[str]]] = [
@@ -63,50 +71,180 @@ def lead_paragraphs(text: str, limit: int = LEAD_CHARS) -> str:
     return "\n".join(out)
 
 
-def _chunks(text: str, size: int = CHUNK_CHARS) -> list[str]:
-    chunks, current = [], ""
-    for p in text.split("\n"):
-        if current and len(current) + len(p) + 1 > size:
-            chunks.append(current)
-            current = ""
-        current = f"{current}\n{p}" if current else p[:size]
-    if current:
-        chunks.append(current)
+def _pieces(paragraph: str, fits) -> list[str]:
+    """Bir paragrafı `fits` sınırını aşmayan parçalara böler; önce cümle, sonra kelime sınırından."""
+    units: list[str] = []
+    for sentence in re.split(r"(?<=[.!?;·])\s+", paragraph.strip()):
+        if fits(sentence):
+            units.append(sentence)
+            continue
+        for word in sentence.split():
+            while not fits(word):  # tek kelime bile sığmıyorsa zorla kes
+                cut = len(word) // 2
+                while cut > 1 and not fits(word[:cut]):
+                    cut //= 2
+                units.append(word[:cut])
+                word = word[cut:]
+            units.append(word)
+    chunks: list[str] = []
+    for unit in units:
+        if chunks and fits(chunks[-1] + " " + unit):
+            chunks[-1] += " " + unit
+        else:
+            chunks.append(unit)
     return chunks
+
+
+class RateLimited(Exception):
+    """Servis günlük/anlık sınırına ulaştı; bu tarama boyunca bir daha denenmez."""
+
+
+class Provider:
+    name = ""
+
+    def fits(self, chunk: str) -> bool:
+        raise NotImplementedError
+
+    def translate_chunk(self, client: httpx.Client, chunk: str, source_lang: str) -> str:
+        raise NotImplementedError
+
+
+class GoogleProvider(Provider):
+    name = "google"
+    max_chars = 900  # küçük istekler Google'ın sınırına daha geç takılır
+
+    def fits(self, chunk: str) -> bool:
+        return len(chunk) <= self.max_chars
+
+    def translate_chunk(self, client, chunk, source_lang):
+        response = client.get(GOOGLE_URL, params={"client": "gtx", "sl": source_lang or "auto", "tl": "tr", "dt": "t", "q": chunk})
+        if response.status_code in (429, 503):
+            raise RateLimited(f"HTTP {response.status_code}")
+        if response.status_code != 200:
+            raise AIError(f"HTTP {response.status_code}")
+        data = response.json()
+        return "".join(seg[0] for seg in data[0] if seg and seg[0])
+
+
+class MyMemoryProvider(Provider):
+    name = "mymemory"
+    max_bytes = 480  # servis istek başına 500 bayt kabul ediyor
+
+    def __init__(self, email: str = ""):
+        self.email = email
+
+    def fits(self, chunk: str) -> bool:
+        return len(chunk.encode("utf-8")) <= self.max_bytes
+
+    def translate_chunk(self, client, chunk, source_lang):
+        params = {"q": chunk, "langpair": f"{source_lang or 'en'}|tr"}
+        if self.email:
+            params["de"] = self.email
+        response = client.get(MYMEMORY_URL, params=params)
+        if response.status_code in (429, 403):
+            raise RateLimited(f"HTTP {response.status_code}")
+        if response.status_code != 200:
+            raise AIError(f"HTTP {response.status_code}")
+        data = response.json()
+        text = (data.get("responseData") or {}).get("translatedText") or ""
+        status = str(data.get("responseStatus", 200))
+        if data.get("quotaFinished") or status in ("429", "403") or "MYMEMORY WARNING" in text.upper():
+            raise RateLimited(data.get("responseDetails") or "günlük sınır doldu")
+        if status != "200":
+            raise AIError(data.get("responseDetails") or f"durum {status}")
+        return text
+
+
+class LibreTranslateProvider(Provider):
+    name = "libretranslate"
+    max_chars = 2000
+
+    def __init__(self, url: str, api_key: str = ""):
+        self.url = url.rstrip("/")
+        self.api_key = api_key
+
+    def fits(self, chunk: str) -> bool:
+        return len(chunk) <= self.max_chars
+
+    def translate_chunk(self, client, chunk, source_lang):
+        body = {"q": chunk, "source": source_lang or "auto", "target": "tr", "format": "text"}
+        if self.api_key:
+            body["api_key"] = self.api_key
+        response = client.post(f"{self.url}/translate", json=body)
+        if response.status_code == 429:
+            raise RateLimited("HTTP 429")
+        if response.status_code != 200:
+            raise AIError(f"HTTP {response.status_code}")
+        return response.json()["translatedText"]
+
+
+def default_providers() -> list[Provider]:
+    s = get_settings()
+    providers: list[Provider] = []
+    if s.libretranslate_url:  # kendi sunucunuz: sınırsız, bu yüzden ilk sırada
+        providers.append(LibreTranslateProvider(s.libretranslate_url, s.libretranslate_api_key))
+    providers += [GoogleProvider(), MyMemoryProvider(s.mymemory_email)]
+    return providers
 
 
 class FreeTranslator:
     name = "free"
 
-    def __init__(self, client: httpx.Client | None = None):
-        self.client = client or httpx.Client(timeout=get_settings().request_timeout_seconds)
+    def __init__(self, client: httpx.Client | None = None, providers: list[Provider] | None = None, delay: float | None = None):
+        s = get_settings()
+        self.client = client or httpx.Client(timeout=s.request_timeout_seconds, follow_redirects=True)
+        self.providers = providers if providers is not None else default_providers()
+        self.delay = s.free_translate_delay_seconds if delay is None else delay
+        self.exhausted: set[str] = set()  # sınıra takılan servisler bu taramada atlanır
+        self._last_call = 0.0
 
     def ensure_ready(self) -> None:
         pass
 
-    def translate(self, text: str) -> str:
+    def _wait(self) -> None:
+        pause = self.delay - (time.monotonic() - self._last_call)
+        if pause > 0:
+            time.sleep(pause)
+        self._last_call = time.monotonic()
+
+    def _translate_with(self, provider: Provider, text: str, source_lang: str) -> str:
+        paragraphs = []
+        for paragraph in text.split("\n"):
+            if not paragraph.strip():
+                continue
+            parts = []
+            for chunk in _pieces(paragraph, provider.fits):
+                self._wait()
+                try:
+                    parts.append(provider.translate_chunk(self.client, chunk, source_lang))
+                except httpx.HTTPError as exc:
+                    raise AIError(f"ulaşılamadı: {exc}") from exc
+                except (ValueError, TypeError, IndexError, KeyError) as exc:
+                    raise AIError("beklenmeyen yanıt") from exc
+            paragraphs.append(" ".join(parts))
+        return "\n".join(paragraphs)
+
+    def translate(self, text: str, source_lang: str = "auto") -> str:
         if not text.strip():
             return ""
-        parts = []
-        for chunk in _chunks(text):
+        errors = []
+        for provider in self.providers:
+            if provider.name in self.exhausted:
+                continue
             try:
-                response = self.client.post(
-                    GOOGLE_URL,
-                    params={"client": "gtx", "sl": "auto", "tl": "tr", "dt": "t"},
-                    data={"q": chunk},
-                )
-            except httpx.HTTPError as exc:
-                raise AIError(f"Çeviri servisine ulaşılamadı: {exc}") from exc
-            if response.status_code == 429:
-                raise AIFatalError("Ücretsiz çeviri servisi istek sınırına ulaştı; bekleyen haberler sonraki taramada çevrilecek.")
-            if response.status_code != 200:
-                raise AIError(f"Çeviri servisi hata verdi: HTTP {response.status_code}")
-            try:
-                data = response.json()
-                parts.append("".join(seg[0] for seg in data[0] if seg and seg[0]))
-            except (ValueError, TypeError, IndexError) as exc:
-                raise AIError("Çeviri servisinden beklenmeyen yanıt") from exc
-        return "\n".join(parts)
+                return self._translate_with(provider, text, source_lang)
+            except RateLimited as exc:
+                log.warning("%s çeviri sınırına ulaştı: %s", provider.name, exc)
+                self.exhausted.add(provider.name)
+                errors.append(f"{provider.name}: sınır doldu")
+            except AIError as exc:
+                log.warning("%s çeviri hatası: %s", provider.name, exc)
+                errors.append(f"{provider.name}: {exc}")
+        if all(p.name in self.exhausted for p in self.providers):
+            raise AIFatalError(
+                "Ücretsiz çeviri servislerinin hepsi istek sınırına ulaştı; bekleyen haberler sonraki taramada çevrilecek."
+            )
+        raise AIError("Çeviri yapılamadı (" + "; ".join(errors) + ")")
 
     def check_relevance(self, title: str, text: str, language: str, categories: dict[str, str]) -> RelevanceResult:
         in_title = bool(keywords.matched_keywords(title))
@@ -119,8 +257,8 @@ class FreeTranslator:
         return RelevanceResult(relevant, category, reason)
 
     def rewrite(self, title: str, text: str, language: str, source_name: str) -> RewriteResult:
-        title_tr = self.translate(title)
-        summary_tr = self.translate(lead_paragraphs(text or ""))
+        title_tr = self.translate(title, language)
+        summary_tr = self.translate(lead_paragraphs(text or ""), language)
         matched = keywords.matched_keywords(title, text)
         tags = list(dict.fromkeys(KEYWORD_TAGS[k] for k in matched if k in KEYWORD_TAGS))
         return RewriteResult(title_tr=title_tr, summary_tr=summary_tr, key_points=[], tags=tags)

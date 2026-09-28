@@ -13,6 +13,14 @@ class Settings(BaseSettings):
     # Çeviri yöntemi: auto (anahtar varsa Claude, yoksa ücretsiz) | claude | free
     translator: str = "auto"
 
+    # Ücretsiz çeviri: e-posta verilirse MyMemory günlük sınırı 5.000'den 50.000 karaktere çıkar
+    mymemory_email: str = ""
+    # İsteğe bağlı kendi LibreTranslate sunucunuz (ör. http://libretranslate:5000); sınırsızdır
+    libretranslate_url: str = ""
+    libretranslate_api_key: str = ""
+    # Ücretsiz servislere art arda istek arasındaki bekleme (saniye)
+    free_translate_delay_seconds: float = 1.0
+
     # Modeller: ucuz ayıklama + kaliteli Türkçeleştirme
     relevance_model: str = "claude-haiku-4-5"
     rewrite_model: str = "claude-sonnet-5"

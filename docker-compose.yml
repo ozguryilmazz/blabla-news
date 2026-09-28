@@ -35,5 +35,17 @@ services:
       - "3000:3000"
     restart: unless-stopped
 
+  # İsteğe bağlı sınırsız yerel çeviri: docker compose --profile ceviri up
+  # İlk açılışta dil modellerini indirir (birkaç dakika sürer)
+  libretranslate:
+    image: libretranslate/libretranslate:latest
+    profiles: ["ceviri"]
+    environment:
+      LT_LOAD_ONLY: en,el,he,tr
+    volumes:
+      - ltmodels:/home/libretranslate/.local
+    restart: unless-stopped
+
 volumes:
   dbdata:
+  ltmodels:

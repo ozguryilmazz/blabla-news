@@ -51,7 +51,7 @@ export default async function ArticlePage({ params }: { params: Promise<{ id: st
             </>
           )}
           {a.translator === "free" && (
-            <p className="muted small">Bu metin otomatik makine çevirisidir (Google Translate).</p>
+            <p className="muted small">Bu metin otomatik makine çevirisidir.</p>
           )}
           {a.tags.length > 0 && (
             <div className="tags">

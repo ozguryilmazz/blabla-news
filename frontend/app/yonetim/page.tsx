@@ -139,7 +139,7 @@ export default function AdminPage() {
         </p>
         <p>
           Çeviri yöntemi:{" "}
-          <strong>{status?.translator === "claude" ? "Claude (özet ve yeniden yazım)" : "Ücretsiz (Google Translate, makine çevirisi)"}</strong>
+          <strong>{status?.translator === "claude" ? "Claude (özet ve yeniden yazım)" : "Ücretsiz (Google Translate / MyMemory, makine çevirisi)"}</strong>
           {status?.translator === "free" && (
             <span className="muted"> · Claude'a geçmek için .env dosyasına ANTHROPIC_API_KEY ekleyip sistemi yeniden başlatın.</span>
           )}

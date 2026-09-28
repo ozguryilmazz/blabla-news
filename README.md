@@ -13,7 +13,10 @@ Gereksinimler: [docs/gereksinimler.md](docs/gereksinimler.md)
 5. **Türkçeleştirme:** Güçlü model (Claude Sonnet 5) haberi birebir çevirmeden, kendi cümleleriyle geniş bir Türkçe özet, önemli noktalar ve etiketler olarak yeniden yazar.
 6. **Yayın:** Sitede solda orijinal başlık, kısa alıntı ve kaynak linki; sağda Türkçe özet gösterilir. Tam orijinal metin yalnızca veritabanında tutulur, sitede gösterilmez.
 
-**Ücretsiz mod:** `ANTHROPIC_API_KEY` boşsa sistem otomatik olarak ücretsiz yönteme geçer. İlgi ve kategori anahtar kelimelerle belirlenir, başlık ve haberin giriş paragrafları Google Translate ile Türkçeye çevrilir. Özet ve önemli noktalar üretilmez; sitede "makine çevirisi" notu görünür. Anahtar eklenip sistem yeniden başlatıldığında Claude'a geri dönülür. `TRANSLATOR=free` ile anahtar olsa bile ücretsiz mod zorlanabilir.
+**Ücretsiz mod:** `ANTHROPIC_API_KEY` boşsa sistem otomatik olarak ücretsiz yönteme geçer. İlgi ve kategori anahtar kelimelerle belirlenir, başlık ve haberin giriş paragrafları ücretsiz servislerle Türkçeye çevrilir. Sıra: kendi LibreTranslate sunucunuz (ayarlıysa), Google Translate, MyMemory. Bir servis sınırına takılırsa o tarama boyunca atlanır ve sıradakine geçilir; hepsi doluysa haberler bekletilip sonraki taramada çevrilir. Özet ve önemli noktalar üretilmez; sitede "makine çevirisi" notu görünür. Anahtar eklenip sistem yeniden başlatıldığında Claude'a geri dönülür. `TRANSLATOR=free` ile anahtar olsa bile ücretsiz mod zorlanabilir.
+
+- `MYMEMORY_EMAIL`: Bir e-posta adresi yazılırsa MyMemory'nin günlük sınırı 5.000'den 50.000 karaktere çıkar (yaklaşık 30 haber).
+- Sınırsız yerel çeviri: `docker compose --profile ceviri up --build` ile LibreTranslate sunucusu da açılır (ilk açılışta dil modellerini indirir). `.env` içine `LIBRETRANSLATE_URL=http://libretranslate:5000` yazın.
 
 **Bütçe:** Her yapay zekâ çağrısının maliyeti kaydedilir. Aylık sınıra (varsayılan 50 €, bunun 10 €'su sunucuya ayrılır) ulaşıldığında haberler toplanmaya devam eder, Türkçeleştirme bir sonraki ay kaldığı yerden sürer.
 
