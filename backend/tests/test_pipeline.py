@@ -94,3 +94,33 @@ def test_broken_source_is_recorded_and_others_continue(session):
     broken = session.scalar(select(Source).where(Source.url == TOV))
     session.refresh(broken)
     assert "bağlantı" in broken.last_error
+
+
+def test_missing_api_key_keeps_articles_pending_with_clear_note(session, monkeypatch):
+    from app import ai as ai_module
+    from app.config import get_settings
+
+    only_source(session)
+    monkeypatch.setattr(get_settings(), "anthropic_api_key", "")
+    fetcher = FakeFetcher(feeds={TOV: [entry("u1", "Erdogan speech"), entry("u2", "Ankara talks")]})
+    run = run_scan(db.session_factory, fetcher, ai_module.ClaudeAI())
+
+    assert statuses(session) == {"u1": "pending", "u2": "pending"}
+    assert "ANTHROPIC_API_KEY" in run.note
+    assert run.new_items == 2 and run.finished_at is not None
+
+
+def test_auth_failure_mid_scan_stops_and_keeps_pending(session):
+    from app.ai import AIFatalError
+
+    class BrokenKeyAI(FakeAI):
+        def check_relevance(self, *args):
+            self.relevance_calls += 1
+            raise AIFatalError("Anthropic API anahtarı geçersiz")
+
+    only_source(session)
+    ai = BrokenKeyAI()
+    run = run_scan(db.session_factory, FakeFetcher(feeds={TOV: [entry("u1", "Erdogan"), entry("u2", "Ankara")]}), ai)
+    assert statuses(session) == {"u1": "pending", "u2": "pending"}
+    assert ai.relevance_calls == 1  # ilk hatada durur, her haber için tekrar denemez
+    assert "geçersiz" in run.note

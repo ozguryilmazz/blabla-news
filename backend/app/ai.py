@@ -18,6 +18,10 @@ class AIError(Exception):
         self.usage = usage  # başarısız ama ücretlendirilmiş çağrılar da bütçeye yazılır
 
 
+class AIFatalError(AIError):
+    """Hiçbir haberin işlenemeyeceği hatalar (API anahtarı yok/geçersiz). Tarama durur, haberler bekler."""
+
+
 @dataclass
 class Usage:
     model: str
@@ -75,14 +79,24 @@ Haberi birebir çevirme. Kendi cümlelerinle, Türkçe olarak yeniden yaz:
 Özel isimleri Türkçede yerleşik yazımlarıyla kullan (ör. Miçotakis, Netanyahu, Atina, Kudüs)."""
 
 
+MISSING_KEY_MESSAGE = (
+    "Anthropic API anahtarı tanımlı değil. .env dosyasındaki ANTHROPIC_API_KEY satırını doldurup sistemi yeniden başlatın."
+)
+
+
 class ClaudeAI:
     def __init__(self, client: anthropic.Anthropic | None = None):
         s = get_settings()
+        self._has_key = client is not None or bool(s.anthropic_api_key.strip())
         self.client = client or anthropic.Anthropic(
             api_key=s.anthropic_api_key or None, timeout=120.0, max_retries=2
         )
         self.relevance_model = s.relevance_model
         self.rewrite_model = s.rewrite_model
+
+    def ensure_ready(self) -> None:
+        if not self._has_key:
+            raise AIFatalError(MISSING_KEY_MESSAGE)
 
     def _parse(self, *, model: str, purpose: str, system: str, content: str, schema, max_tokens: int, **extra):
         try:
@@ -94,8 +108,12 @@ class ClaudeAI:
                 output_format=schema,
                 **extra,
             )
+        except (anthropic.AuthenticationError, anthropic.PermissionDeniedError) as exc:
+            raise AIFatalError(f"Anthropic API anahtarı geçersiz veya yetkisiz: {exc}") from exc
         except anthropic.APIError as exc:
             raise AIError(f"{purpose}: {exc}") from exc
+        except TypeError as exc:  # SDK kimlik bilgisi bulamazsa TypeError fırlatır
+            raise AIFatalError(MISSING_KEY_MESSAGE) from exc
 
         usage = Usage(model, purpose, response.usage.input_tokens, response.usage.output_tokens)
         if response.stop_reason != "end_turn" or response.parsed_output is None:

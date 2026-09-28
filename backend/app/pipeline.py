@@ -9,7 +9,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from . import keywords
-from .ai import AIError, Usage
+from .ai import AIError, AIFatalError, Usage
 from .budget import budget_exhausted
 from .collector import make_excerpt
 from .config import get_settings
@@ -95,6 +95,17 @@ def process_pending(session: Session, ai, run: ScanRun) -> None:
     pending = session.scalars(
         select(Article).where(Article.status == "pending").order_by(Article.fetched_at)
     ).all()
+    if not pending:
+        return
+    try:
+        ensure_ready = getattr(ai, "ensure_ready", None)
+        if ensure_ready:
+            ensure_ready()
+    except AIFatalError as exc:
+        run.note = str(exc)
+        run.errors += 1
+        return
+
     for article in pending:
         if budget_exhausted(session):
             run.note = "Aylık yapay zekâ bütçesi doldu; bekleyen haberler gelecek ay işlenecek."
@@ -119,6 +130,14 @@ def process_pending(session: Session, ai, run: ScanRun) -> None:
                 article.tags = ", ".join(rewrite.tags)
                 article.status = "published"
                 run.published += 1
+        except AIFatalError as exc:
+            # Haber "bekliyor" durumunda kalır; sorun giderilince sonraki taramada işlenir
+            article.status = "pending"
+            _log_usage(session, exc.usage)
+            run.note = str(exc)
+            run.errors += 1
+            session.commit()
+            break
         except AIError as exc:
             _log_usage(session, exc.usage)
             article.status = "failed"

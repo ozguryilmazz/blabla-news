@@ -12,7 +12,15 @@ import trafilatura
 
 from .config import get_settings
 
-USER_AGENT = "Mozilla/5.0 (compatible; HaberAnalizBot/0.1)"
+# Birçok haber sitesi bot gibi görünen istekleri 403 ile reddediyor; sıradan bir tarayıcı gibi istek atılır
+BROWSER_HEADERS = {
+    "User-Agent": (
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+        "(KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36"
+    ),
+    "Accept": "application/rss+xml, application/xml;q=0.9, text/xml;q=0.9, text/html;q=0.8, */*;q=0.7",
+    "Accept-Language": "el,he;q=0.9,en;q=0.8,tr;q=0.7",
+}
 _TAG_RE = re.compile(r"<[^>]+>")
 _WS_RE = re.compile(r"\s+")
 
@@ -61,7 +69,7 @@ class HttpFetcher:
         self.client = httpx.Client(
             timeout=s.request_timeout_seconds,
             follow_redirects=True,
-            headers={"User-Agent": USER_AGENT},
+            headers=BROWSER_HEADERS,
         )
 
     def fetch_feed(self, url: str) -> list[FeedEntry]:

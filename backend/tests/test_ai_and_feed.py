@@ -59,3 +59,26 @@ def test_claude_ai_requests_and_parsing():
     assert seen[1]["model"] == "claude-sonnet-5"
     assert seen[1]["thinking"] == {"type": "disabled"}
     assert seen[0]["output_config"]["format"]["type"] == "json_schema"
+
+
+def test_sdk_type_error_becomes_fatal():
+    import pytest
+
+    from app.ai import AIFatalError
+
+    class NoAuthMessages:
+        def parse(self, **kwargs):
+            raise TypeError("Could not resolve authentication method")
+
+    class NoAuthClient:
+        messages = NoAuthMessages()
+
+    with pytest.raises(AIFatalError):
+        ClaudeAI(client=NoAuthClient()).check_relevance("t", "x", "en", {"diger": "Diğer"})
+
+
+def test_browser_headers_are_used():
+    from app.collector import BROWSER_HEADERS, HttpFetcher
+
+    assert "Chrome" in HttpFetcher().client.headers["User-Agent"]
+    assert "Bot" not in BROWSER_HEADERS["User-Agent"]
