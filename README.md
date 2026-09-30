@@ -37,6 +37,16 @@ docker compose up --build
 
 > Örnek kaynakların RSS adresleri geliştirme ortamından doğrulanamadı. Bir adres çalışmazsa panelde "Son hata" sütununda görünür; o kaynağı kapatıp doğru adresle yeniden ekleyebilirsiniz.
 
+## Hızlı geliştirme modu
+
+Her güncellemede yeniden derlemek yerine kod klasörleri kapsayıcılara bağlanabilir. `.env` dosyasına şu satırı ekleyin:
+
+```
+COMPOSE_FILE=docker-compose.yml;docker-compose.dev.yml
+```
+
+Bir kez `docker compose up -d` çalıştırın (ilk açılışta web paketleri kurulur). Bundan sonra güncellemek için `git pull` yeterli: arka uç ve site değişiklikleri birkaç saniye içinde kendiliğinden yüklenir, sayfayı yenilemeniz yeter. Yalnızca `requirements.txt` veya `package.json` değiştiğinde `docker compose up -d --build` gerekir. Sunucuya taşırken bu satır kaldırılır.
+
 ## Yönetim paneli
 
 - **Şimdi tara / Durdur / Devam ettir:** Manuel tarama ve otomatik taramayı durdurma.
