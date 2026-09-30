@@ -42,6 +42,11 @@ SOURCES = [
     ("in.gr", "GR", "el", "https://www.in.gr/feed/"),
     ("iefimerida", "GR", "el", "https://www.iefimerida.gr/rss.xml"),
     ("Walla", "IL", "he", "https://rss.walla.co.il/feed/1"),
+    ("CNN Greece", "GR", "el", "https://www.cnn.gr/?format=feed&type=rss"),
+    ("SKAI", "GR", "el", "https://www.skai.gr/feed.xml"),
+    ("Mako", "IL", "he", "https://rcs.mako.co.il/rss/news-israel.xml"),
+    ("Israel National News", "IL", "en", "https://www.israelnationalnews.com/Rss.aspx?act=.1"),
+    ("JNS", "IL", "en", "https://www.jns.org/feed/"),
 ]
 
 # Artık çalışmayan adresler; kurulu sistemlerde kapatılır
