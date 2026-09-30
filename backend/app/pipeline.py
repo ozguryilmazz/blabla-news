@@ -70,8 +70,11 @@ def collect(session: Session, fetcher, run: ScanRun) -> None:
             existing = session.scalar(select(Article).where(Article.url == entry.url))
             if existing is not None:
                 # Görsel özelliğinden önce kaydedilen yayınlanmış haberlerin görseli bir kez tamamlanır
-                if existing.image_url is None and existing.status == "published":
-                    existing.image_url = entry.image_url or fetcher.fetch_article(entry.url).image_url or ""
+                if existing.status == "published" and not existing.image_url:
+                    if entry.image_url:  # beslemede görsel varsa her zaman alınır (ağ isteği gerektirmez)
+                        existing.image_url = entry.image_url
+                    elif existing.image_url is None:  # sayfa yalnızca bir kez aranır
+                        existing.image_url = fetcher.fetch_article(entry.url).image_url or ""
                 continue
             page = fetcher.fetch_article(entry.url)
             text = page.text or entry.summary

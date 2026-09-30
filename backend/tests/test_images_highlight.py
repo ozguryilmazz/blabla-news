@@ -107,3 +107,15 @@ def test_image_proxy(client, session, monkeypatch):
     r = client.get(item["image_url"])
     assert r.status_code == 200 and r.content == b"JPEG" and seen == ["https://t/a"]
     assert client.get("/api/admin/status", headers={"X-Admin-Password": main.get_settings().admin_password}).json()["counts"]["with_image"] == 1
+
+
+def test_feed_image_fills_article_marked_without_image(session):
+    tov = "https://www.timesofisrael.com/feed/"
+    _only(session, tov)
+    fetcher = FakeFetcher(feeds={tov: [entry("u1", "Erdogan warns")]}, texts={"u1": "Erdogan"})
+    run_scan(db.session_factory, fetcher, FakeAI())
+    assert session.scalar(select(Article.image_url).where(Article.url == "u1")) == ""
+    fetcher.feeds = {tov: [entry("u1", "Erdogan warns", image_url="https://img/late.jpg")]}
+    run_scan(db.session_factory, fetcher, FakeAI())
+    session.expire_all()
+    assert session.scalar(select(Article.image_url).where(Article.url == "u1")) == "https://img/late.jpg"
