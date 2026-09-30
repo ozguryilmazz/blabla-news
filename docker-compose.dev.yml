@@ -1,0 +1,30 @@
+# Geliştirme modu: kod klasörleri kapsayıcılara bağlanır, değişiklikler yeniden derlemeden görünür.
+# Açmak için .env dosyasına şu satırı ekleyin (Windows'ta ayırıcı noktalı virgül):
+#   COMPOSE_FILE=docker-compose.yml;docker-compose.dev.yml
+# Sonra her zamanki gibi: docker compose up -d
+services:
+  api:
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+    environment:
+      # Windows klasöründeki değişiklikleri Docker içinden görebilmek için yoklama
+      WATCHFILES_FORCE_POLLING: "true"
+    volumes:
+      - ./backend/app:/app/app
+
+  web:
+    image: node:22-alpine
+    build: !reset null
+    working_dir: /app
+    command: sh -c "npm ci --no-audit --no-fund && npx next dev --webpack -H 0.0.0.0 -p 3000"
+    environment:
+      API_URL: http://api:8000
+      WATCHPACK_POLLING: "true"
+    volumes:
+      - ./frontend:/app
+      # Paketler ve derleme önbelleği Docker içinde kalır (Windows klasörüne yazılmaz, daha hızlı)
+      - web_node_modules:/app/node_modules
+      - web_next:/app/.next
+
+volumes:
+  web_node_modules:
+  web_next:

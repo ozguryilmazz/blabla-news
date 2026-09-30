@@ -1,0 +1,246 @@
+"""Tarama akışı: kaynakları çek → anahtar kelime ön elemesi → yapay zekâ ilgi kontrolü →
+kategori seçimi → Türkçe yeniden yazım → yayın."""
+
+import logging
+import threading
+from datetime import datetime, timezone
+
+from sqlalchemy import select
+from sqlalchemy.orm import Session
+
+from . import keywords
+from .ai import AIError, AIFatalError, Usage
+from .budget import budget_exhausted
+from .collector import make_excerpt
+from .config import get_settings
+from .models import AppSetting, Article, Category, ScanRun, Source, UsageLog
+from .progress import ScanCancelled, progress
+
+log = logging.getLogger(__name__)
+
+_scan_lock = threading.Lock()
+
+PAUSED_KEY = "scan_paused"
+
+
+def is_paused(session: Session) -> bool:
+    setting = session.get(AppSetting, PAUSED_KEY)
+    return setting is not None and setting.value == "1"
+
+
+def set_paused(session: Session, paused: bool) -> None:
+    setting = session.get(AppSetting, PAUSED_KEY) or AppSetting(key=PAUSED_KEY, value="0")
+    setting.value = "1" if paused else "0"
+    session.merge(setting)
+    session.commit()
+
+
+def scan_running() -> bool:
+    return _scan_lock.locked()
+
+
+def _log_usage(session: Session, usage: Usage | None) -> None:
+    if usage is None:
+        return
+    session.add(
+        UsageLog(
+            model=usage.model,
+            purpose=usage.purpose,
+            input_tokens=usage.input_tokens,
+            output_tokens=usage.output_tokens,
+            cost_usd=usage.cost_usd,
+        )
+    )
+
+
+def collect(session: Session, fetcher, run: ScanRun) -> None:
+    max_items = get_settings().max_items_per_source
+    sources = session.scalars(select(Source).where(Source.active.is_(True))).all()
+    progress.phase(0, len(sources))
+    for source in sources:
+        progress.check_cancel()
+        progress.step(source.name)
+        source.last_checked_at = datetime.now(timezone.utc)
+        try:
+            entries = fetcher.fetch_feed(source.url)
+        except Exception as exc:  # her kaynak bağımsız; biri bozuksa diğerleri devam eder
+            source.last_error = str(exc)[:500]
+            run.errors += 1
+            session.commit()
+            progress.event(f"{source.name}: okunamadı ({str(exc)[:120]})", "error")
+            progress.advance()
+            continue
+        source.last_error = None
+        new, candidates = 0, 0
+
+        for entry in entries[:max_items]:
+            progress.check_cancel()
+            existing = session.scalar(select(Article).where(Article.url == entry.url))
+            if existing is not None:
+                # Görsel özelliğinden önce kaydedilen yayınlanmış haberlerin görseli bir kez tamamlanır
+                if existing.status == "published" and not existing.image_url:
+                    if entry.image_url:  # beslemede görsel varsa her zaman alınır (ağ isteği gerektirmez)
+                        existing.image_url = entry.image_url
+                    elif existing.image_url is None:  # sayfa yalnızca bir kez aranır
+                        existing.image_url = fetcher.fetch_article(entry.url).image_url or ""
+                continue
+            page = fetcher.fetch_article(entry.url)
+            text = page.text or entry.summary
+            article = Article(
+                source_id=source.id,
+                url=entry.url,
+                published_at=entry.published_at or datetime.now(timezone.utc),
+                title_orig=entry.title,
+                excerpt_orig=make_excerpt(entry.summary or text or ""),
+                image_url=entry.image_url or page.image_url or "",
+            )
+            new += 1
+            if keywords.is_candidate(entry.title, entry.summary, text):
+                article.status = "pending"
+                article.content_orig = text
+                run.new_items += 1
+                candidates += 1
+            else:
+                article.status = "irrelevant"  # yalnızca tekrar görmemek için saklanır
+            session.add(article)
+        session.commit()
+        progress.event(f"{source.name}: {new} yeni haber, {candidates} Türkiye adayı")
+        progress.advance()
+
+
+def process_pending(session: Session, ai, run: ScanRun) -> None:
+    categories = session.scalars(select(Category).order_by(Category.sort_order)).all()
+    category_names = {c.slug: c.name for c in categories}
+    by_slug = {c.slug: c for c in categories}
+
+    pending = session.scalars(
+        select(Article).where(Article.status == "pending").order_by(Article.fetched_at)
+    ).all()
+    if not pending:
+        progress.event("Çevrilecek bekleyen haber yok")
+        return
+    try:
+        ensure_ready = getattr(ai, "ensure_ready", None)
+        if ensure_ready:
+            ensure_ready()
+    except AIFatalError as exc:
+        run.note = str(exc)
+        run.errors += 1
+        return
+
+    progress.phase(1, len(pending))
+    for article in pending:
+        progress.check_cancel()
+        progress.step(article.title_orig)
+        if budget_exhausted(session):
+            run.note = "Aylık yapay zekâ bütçesi doldu; bekleyen haberler gelecek ay işlenecek."
+            break
+        source = article.source
+        try:
+            relevance = ai.check_relevance(article.title_orig, article.content_orig or "", source.language, category_names)
+            _log_usage(session, relevance.usage)
+            category = by_slug.get(relevance.category) or by_slug.get("diger")
+            article.category_id = category.id if category else None
+
+            if not relevance.relevant:
+                article.status = "irrelevant"
+                progress.event(f"İlgisiz bulundu: {article.title_orig}")
+            elif category is not None and not category.scan_enabled:
+                article.status = "skipped_category"
+                progress.event(f"Kategorisi kapalı ({category.name}): {article.title_orig}")
+            else:
+                rewrite = ai.rewrite(article.title_orig, article.content_orig or "", source.language, source.name)
+                _log_usage(session, rewrite.usage)
+                article.title_tr = rewrite.title_tr
+                article.summary_tr = rewrite.summary_tr
+                article.key_points_tr = "\n".join(rewrite.key_points)
+                article.tags = ", ".join(rewrite.tags)
+                article.translator = getattr(ai, "name", None)
+                article.status = "published"
+                run.published += 1
+                progress.event(f"Yayınlandı: {rewrite.title_tr}", "ok")
+        except AIFatalError as exc:
+            # Haber "bekliyor" durumunda kalır; sorun giderilince sonraki taramada işlenir
+            article.status = "pending"
+            _log_usage(session, exc.usage)
+            run.note = str(exc)
+            run.errors += 1
+            session.commit()
+            progress.event(str(exc), "error")
+            break
+        except AIError as exc:
+            _log_usage(session, exc.usage)
+            article.status = "failed"
+            run.errors += 1
+            log.warning("Yapay zekâ adımı başarısız (%s): %s", article.url, exc)
+            progress.event(f"Çevrilemedi: {article.title_orig} ({exc})", "error")
+        session.commit()
+        progress.advance()
+
+
+def recheck_free_published(session: Session, ai) -> int:
+    """Ücretsiz yöntemin ilgi kuralı sıkılaştığında, eskiden yayınlanmış ama artık ilgisiz sayılan
+    haberler yayından kaldırılır. Ağ isteği yapmaz; yalnızca kayıtlı metne bakar. Claude'un
+    yayınladıklarına dokunulmaz."""
+    if getattr(ai, "name", None) != "free":
+        return 0
+    removed = 0
+    categories = {c.slug: c.name for c in session.scalars(select(Category))}
+    rows = session.scalars(select(Article).join(Source).where(Article.status == "published", Article.translator == "free")).all()
+    for article in rows:
+        if not ai.check_relevance(article.title_orig, article.content_orig or "", article.source.language, categories).relevant:
+            article.status = "irrelevant"
+            removed += 1
+    session.commit()
+    return removed
+
+
+def run_scan(session_factory, fetcher, ai, trigger: str = "manual", wait: float = 0) -> ScanRun | None:
+    """Tek seferlik tarama. Başka bir tarama sürüyorsa (wait saniye bekledikten sonra) None döner."""
+    acquired = _scan_lock.acquire(timeout=wait) if wait else _scan_lock.acquire(blocking=False)
+    if not acquired:
+        return None
+    progress.cancel.clear()
+    session = session_factory()
+    try:
+        run = ScanRun(trigger=trigger)
+        session.add(run)
+        session.commit()
+        progress.start(run.id, trigger)
+        try:
+            recheck_free_published(session, ai)
+            collect(session, fetcher, run)
+            process_pending(session, ai, run)
+        except ScanCancelled:
+            session.rollback()
+            run.note = "İptal edildi: yeni tarama başlatıldı"
+        except Exception as exc:
+            log.exception("Tarama hatası")
+            session.rollback()
+            run.note = f"Tarama hatası: {exc}"[:500]
+            run.errors += 1
+        run.finished_at = datetime.now(timezone.utc)
+        session.merge(run)
+        session.commit()
+        progress.finish(run.note)
+        return run
+    finally:
+        session.close()
+        _scan_lock.release()
+
+
+def cancel_running_scan() -> bool:
+    """Süren taramaya durma isteği gönderir; tarama bir sonraki adımda durur."""
+    if not _scan_lock.locked():
+        return False
+    progress.cancel.set()
+    progress.event("Yeni tarama istendi; bu tarama durduruluyor", "error")
+    return True
+
+
+def close_interrupted_runs(session: Session) -> None:
+    """Sunucu yeniden başladığında yarıda kalmış taramalar "sürüyor" görünmesin."""
+    for run in session.scalars(select(ScanRun).where(ScanRun.finished_at.is_(None))):
+        run.finished_at = datetime.now(timezone.utc)
+        run.note = "Yarıda kaldı: sunucu yeniden başladı"
+    session.commit()
