@@ -1,7 +1,11 @@
 import Link from "next/link";
+import CountryFlag from "@/components/CountryFlag";
 import { apiGet, ArticlePage, Category, COUNTRY_NAMES, formatDate, Source } from "@/lib/api";
 
 type Search = { [key: string]: string | string[] | undefined };
+
+// Satırda 3 kutu olduğu için sayfa boyu 3'ün katı
+const PAGE_SIZE = 18;
 
 const FILTER_KEYS = ["q", "country", "category", "source_id", "date_from", "date_to"] as const;
 
@@ -18,6 +22,7 @@ export default async function HomePage({ searchParams }: { searchParams: Promise
   }
   const page = Math.max(1, Number(one(sp.page)) || 1);
   params.set("page", String(page));
+  params.set("page_size", String(PAGE_SIZE));
 
   const [data, categories, sources] = await Promise.all([
     apiGet<ArticlePage>(`/api/articles?${params}`),
@@ -28,6 +33,7 @@ export default async function HomePage({ searchParams }: { searchParams: Promise
 
   const pageLink = (p: number) => {
     const next = new URLSearchParams(params);
+    next.delete("page_size");
     next.set("page", String(p));
     return `/?${next}`;
   };
@@ -64,18 +70,25 @@ export default async function HomePage({ searchParams }: { searchParams: Promise
       {data.items.length === 0 ? (
         <p className="empty">Bu filtrelerle eşleşen haber yok.</p>
       ) : (
-        <ul className="article-list">
+        <ul className="article-grid">
           {data.items.map((a) => (
-            <li key={a.id} className="article-card">
-              <div className="meta">
-                <span className={`flag flag-${a.source.country}`}>{COUNTRY_NAMES[a.source.country]}</span>
-                <span>{a.source.name}</span>
+            <li key={a.id} className="article-box">
+              <div className={`box-head box-head-${a.source.country}`}>
+                <CountryFlag country={a.source.country} />
+                <span className="box-country">{COUNTRY_NAMES[a.source.country]}</span>
+              </div>
+              <div className="box-meta">
                 {a.category && <span className="chip">{a.category.name}</span>}
                 <time>{formatDate(a.published_at)}</time>
+                <a className="box-source" href={a.url} target="_blank" rel="noopener noreferrer">
+                  Kaynağa git: {a.source.name} ↗
+                </a>
               </div>
-              <h2><Link href={`/haber/${a.id}`}>{a.title_tr ?? a.title_orig}</Link></h2>
-              <p className="orig-title" dir="auto">{a.title_orig}</p>
-              <p>{a.excerpt_tr}</p>
+              <div className="box-body">
+                <h2><Link href={`/haber/${a.id}`}>{a.title_tr ?? a.title_orig}</Link></h2>
+                <p className="orig-title" dir="auto">{a.title_orig}</p>
+                <p className="box-excerpt">{a.excerpt_tr}</p>
+              </div>
             </li>
           ))}
         </ul>

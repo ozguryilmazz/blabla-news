@@ -42,11 +42,22 @@ button:disabled { opacity: 0.5; cursor: default; }
 
 .result-count { color: var(--muted); }
 .empty { padding: 40px 0; text-align: center; color: var(--muted); }
-.article-list { list-style: none; padding: 0; display: grid; gap: 12px; }
-.article-card { background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 16px; }
-.article-card h2 { font-size: 1.15rem; margin: 6px 0; }
-.article-card h2 a { color: var(--text); text-decoration: none; }
-.article-card h2 a:hover { text-decoration: underline; }
+.article-grid { list-style: none; padding: 0; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; }
+@media (max-width: 900px) { .article-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 600px) { .article-grid { grid-template-columns: 1fr; } }
+.article-box { background: var(--card); border: 1px solid var(--border); border-radius: 10px; overflow: hidden; display: flex; flex-direction: column; }
+/* Bayrak başlığı boydan boya kaplar; sağda tam görünür, sola doğru saydamlaşır */
+.box-head { position: relative; height: 72px; display: flex; align-items: center; padding: 0 16px; border-bottom: 1px solid var(--border); }
+.card-flag { position: absolute; inset: 0; -webkit-mask-image: linear-gradient(to left, #000 0%, rgba(0, 0, 0, 0.08) 100%); mask-image: linear-gradient(to left, #000 0%, rgba(0, 0, 0, 0.08) 100%); }
+.box-country { position: relative; font-weight: 700; font-size: 1.15rem; color: var(--text); text-shadow: 0 0 6px var(--card), 0 0 2px var(--card); }
+.box-meta { display: flex; flex-wrap: wrap; gap: 6px 10px; align-items: center; padding: 10px 16px 0; font-size: 0.82rem; color: var(--muted); }
+.box-source { flex-basis: 100%; font-weight: 600; text-decoration: none; }
+.box-source:hover { text-decoration: underline; }
+.box-body { padding: 4px 16px 16px; }
+.box-body h2 { font-size: 1.05rem; line-height: 1.35; margin: 8px 0 4px; }
+.box-body h2 a { color: var(--text); text-decoration: none; }
+.box-body h2 a:hover { text-decoration: underline; }
+.box-excerpt { font-size: 0.92rem; margin: 0; }
 .orig-title { color: var(--muted); font-size: 0.9rem; margin: 0 0 6px; }
 
 .meta { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; font-size: 0.85rem; color: var(--muted); }
