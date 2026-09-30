@@ -168,3 +168,26 @@ def test_pipeline_with_free_translator_publishes_without_cost(session):
     a = session.scalar(select(Article).where(Article.url == "u1"))
     assert a.status == "published" and a.translator == "free" and a.title_tr.startswith("TR:")
     assert session.scalar(select(UsageLog.id)) is None
+
+
+def test_mentions_only_at_the_end_are_not_relevant():
+    tr = translator([])
+    body = "\n".join(["Βάφτιση στη θάλασσα, μια όμορφη τελετή." * 5] * 15)
+    tail = "\nΔιαβάστε επίσης: Τουρκία απειλεί, Ερντογάν μιλά, Άγκυρα απαντά"
+    assert not tr.check_relevance("Βάφτιση", body + tail, "el", CATS).relevant
+    assert tr.check_relevance("Βάφτιση", "Η Τουρκία αντέδρασε.\n" + body + tail, "el", CATS).relevant
+
+
+def test_old_irrelevant_free_articles_are_unpublished(session):
+    tov = "https://www.timesofisrael.com/feed/"
+    src = session.scalar(select(Source).where(Source.url == tov))
+    for s in session.scalars(select(Source)):
+        s.active = False
+    good = Article(source_id=src.id, url="g", title_orig="Erdogan speaks", content_orig="x", status="published", translator="free")
+    bad = Article(source_id=src.id, url="b", title_orig="Football", content_orig="Match report. " * 200 + "Turkey Turkey", status="published", translator="free")
+    claude = Article(source_id=src.id, url="c", title_orig="Football", content_orig="Match", status="published", translator="claude")
+    session.add_all([good, bad, claude])
+    session.commit()
+    run_scan(db.session_factory, FakeFetcher(), translator([]))
+    session.expire_all()
+    assert {a.url: a.status for a in session.scalars(select(Article))} == {"g": "published", "b": "irrelevant", "c": "published"}

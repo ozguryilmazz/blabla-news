@@ -153,6 +153,23 @@ def process_pending(session: Session, ai, run: ScanRun) -> None:
         session.commit()
 
 
+def recheck_free_published(session: Session, ai) -> int:
+    """Ücretsiz yöntemin ilgi kuralı sıkılaştığında, eskiden yayınlanmış ama artık ilgisiz sayılan
+    haberler yayından kaldırılır. Ağ isteği yapmaz; yalnızca kayıtlı metne bakar. Claude'un
+    yayınladıklarına dokunulmaz."""
+    if getattr(ai, "name", None) != "free":
+        return 0
+    removed = 0
+    categories = {c.slug: c.name for c in session.scalars(select(Category))}
+    rows = session.scalars(select(Article).join(Source).where(Article.status == "published", Article.translator == "free")).all()
+    for article in rows:
+        if not ai.check_relevance(article.title_orig, article.content_orig or "", article.source.language, categories).relevant:
+            article.status = "irrelevant"
+            removed += 1
+    session.commit()
+    return removed
+
+
 def run_scan(session_factory, fetcher, ai, trigger: str = "manual") -> ScanRun | None:
     """Tek seferlik tarama. Başka bir tarama sürüyorsa None döner."""
     if not _scan_lock.acquire(blocking=False):
@@ -163,6 +180,7 @@ def run_scan(session_factory, fetcher, ai, trigger: str = "manual") -> ScanRun |
         session.add(run)
         session.commit()
         try:
+            recheck_free_published(session, ai)
             collect(session, fetcher, run)
             process_pending(session, ai, run)
         except Exception as exc:

@@ -247,13 +247,19 @@ class FreeTranslator:
         raise AIError("Çeviri yapılamadı (" + "; ".join(errors) + ")")
 
     def check_relevance(self, title: str, text: str, language: str, categories: dict[str, str]) -> RelevanceResult:
+        """Haberin konusu Türkiye mi? Sayfa metninin sonundaki "ilgili haberler" bağlantıları
+        yanıltmasın diye asıl ağırlık başlığa ve okurun gördüğü giriş bölümüne verilir."""
         in_title = bool(keywords.matched_keywords(title))
-        hits = keywords.count_occurrences(text)
-        relevant = in_title or hits >= 2
+        lead_hits = keywords.count_occurrences(lead_paragraphs(text or ""))
+        total_hits = keywords.count_occurrences(text)
+        relevant = in_title or lead_hits >= 2 or (lead_hits >= 1 and total_hits >= 3)
         category = guess_category(title, text)
         if category not in categories:
             category = "diger"
-        reason = "Başlıkta anahtar kelime var" if in_title else f"Metinde {hits} anahtar kelime"
+        if in_title:
+            reason = "Başlıkta anahtar kelime var"
+        else:
+            reason = f"Girişte {lead_hits}, metnin tamamında {total_hits} anahtar kelime"
         return RelevanceResult(relevant, category, reason)
 
     def rewrite(self, title: str, text: str, language: str, source_name: str) -> RewriteResult:
