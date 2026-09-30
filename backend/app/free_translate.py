@@ -19,6 +19,7 @@ import httpx
 from . import keywords
 from .ai import AIError, AIFatalError, RelevanceResult, RewriteResult
 from .config import get_settings
+from .progress import progress
 
 log = logging.getLogger(__name__)
 
@@ -247,6 +248,7 @@ class FreeTranslator:
             except RateLimited as exc:
                 log.warning("%s çeviri sınırına ulaştı: %s", provider.name, exc)
                 self.exhausted.add(provider.name)
+                progress.event(f"Çeviri servisi {provider.name} sınırına ulaştı; sıradaki servise geçiliyor", "error")
                 errors.append(f"{provider.name}: sınır doldu")
             except AIError as exc:
                 log.warning("%s çeviri hatası: %s", provider.name, exc)

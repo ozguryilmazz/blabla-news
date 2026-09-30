@@ -15,6 +15,7 @@ from .config import get_settings
 from .ai import active_translator_name
 from .db import Base, get_engine, get_session, session_factory, upgrade_schema
 from .models import Article, Category, ScanRun, Source
+from .progress import progress
 from .schemas import (
     AdminStatus,
     ArticleDetail,
@@ -40,6 +41,7 @@ async def lifespan(app: FastAPI):
     session = session_factory()
     try:
         seed(session)
+        pipeline.close_interrupted_runs(session)
     finally:
         session.close()
     scheduler = None
@@ -233,12 +235,14 @@ def admin_status(session: Session = Depends(get_session)):
 
 @app.post("/api/admin/scan", status_code=202, dependencies=[Depends(require_admin)])
 def admin_scan():
-    if pipeline.scan_running():
-        raise HTTPException(status_code=409, detail="Bir tarama zaten sürüyor")
     from .scheduler import start_manual_scan
 
-    start_manual_scan()
-    return {"started": True}
+    return {"started": True, "cancelled_previous": start_manual_scan()}
+
+
+@app.get("/api/admin/progress", dependencies=[Depends(require_admin)])
+def admin_progress():
+    return progress.snapshot()
 
 
 @app.post("/api/admin/pause", dependencies=[Depends(require_admin)])

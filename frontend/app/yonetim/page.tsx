@@ -1,6 +1,7 @@
 "use client";
 
 import { FormEvent, useCallback, useEffect, useState } from "react";
+import ScanProgress, { Progress } from "./ScanProgress";
 
 type Budget = { ai_budget_eur: number; ai_spent_eur: number; monthly_budget_eur: number; server_cost_eur: number; ratio: number; warning: boolean; exhausted: boolean };
 type Run = { id: number; started_at: string; finished_at: string | null; trigger: string; new_items: number; published: number; errors: number; note: string | null };
@@ -83,10 +84,15 @@ export default function AdminPage() {
     return () => clearInterval(t);
   }, [authed, load]);
 
+  const fetchProgress = useCallback(() => call("/api/admin/progress") as Promise<Progress>, [call]);
+  const reload = useCallback(() => {
+    load().catch(() => {});
+  }, [load]);
+
   const run = async (fn: () => Promise<unknown>, ok: string) => {
     try {
       await fn();
-      setMessage(ok);
+      if (ok) setMessage(ok);
       await load();
     } catch (e) {
       setMessage((e as Error).message);
@@ -146,7 +152,17 @@ export default function AdminPage() {
           )}
         </p>
         <div className="actions">
-          <button disabled={status?.scan_running} onClick={() => run(() => call("/api/admin/scan", { method: "POST" }), "Tarama başlatıldı")}>Şimdi tara</button>
+          <button
+            onClick={() =>
+              run(async () => {
+                if (status?.scan_running && !confirm("Süren tarama durdurulup yeni tarama başlatılsın mı?")) return;
+                const r = await call("/api/admin/scan", { method: "POST" });
+                setMessage(r.cancelled_previous ? "Önceki tarama durduruluyor, yeni tarama başlıyor" : "Tarama başlatıldı");
+              }, "")
+            }
+          >
+            Şimdi tara
+          </button>
           {status?.paused ? (
             <button onClick={() => run(() => call("/api/admin/resume", { method: "POST" }), "Otomatik tarama açıldı")}>Devam ettir</button>
           ) : (
@@ -158,6 +174,7 @@ export default function AdminPage() {
             <span key={k} className="chip">{STATUS_NAMES[k] ?? k}: {v}</span>
           ))}
         </p>
+        <ScanProgress fetchProgress={fetchProgress} onFinished={reload} />
       </section>
 
       {b && (

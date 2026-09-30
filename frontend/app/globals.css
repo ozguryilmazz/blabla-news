@@ -95,6 +95,19 @@ button:disabled { opacity: 0.5; cursor: default; }
 .bar-fill { height: 100%; background: #2e8b57; }
 .bar-fill.warn { background: var(--warn); }
 .bar-fill.bad { background: var(--accent); }
+.bar-fill { transition: width 0.6s ease; }
+.bar-fill.live { background: #2e8b57; background-image: linear-gradient(45deg, rgba(255,255,255,.25) 25%, transparent 25%, transparent 50%, rgba(255,255,255,.25) 50%, rgba(255,255,255,.25) 75%, transparent 75%); background-size: 20px 20px; animation: bar-move 1s linear infinite; }
+@keyframes bar-move { to { background-position: 20px 0; } }
+@media (prefers-reduced-motion: reduce) { .bar-fill.live { animation: none; } }
+.scan-progress { margin-top: 12px; border-top: 1px solid var(--border); padding-top: 12px; }
+.scan-progress-head { display: flex; justify-content: space-between; gap: 8px; flex-wrap: wrap; margin-bottom: 6px; }
+.scan-current { color: var(--muted); margin: 6px 0 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.scan-events { list-style: none; padding: 0; margin: 10px 0 0; max-height: 240px; overflow-y: auto; font-size: 0.85rem; border: 1px solid var(--border); border-radius: 6px; }
+.scan-events li { padding: 4px 10px; border-bottom: 1px solid var(--border); }
+.scan-events li:last-child { border-bottom: 0; }
+.scan-events time { color: var(--muted); font-variant-numeric: tabular-nums; margin-right: 6px; }
+.scan-events .ev-error { color: var(--accent); }
+.scan-events .ev-ok { color: #2e8b57; }
 .checks { display: flex; flex-wrap: wrap; gap: 12px 20px; }
 .checks label { display: flex; gap: 6px; align-items: center; }
 .table-wrap { overflow-x: auto; }
