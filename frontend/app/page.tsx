@@ -1,5 +1,7 @@
 import Link from "next/link";
 import CountryFlag from "@/components/CountryFlag";
+import NewsImage from "@/components/NewsImage";
+import { Highlight } from "@/lib/highlight";
 import { apiGet, ArticlePage, Category, COUNTRY_NAMES, formatDate, Source } from "@/lib/api";
 
 type Search = { [key: string]: string | string[] | undefined };
@@ -24,10 +26,11 @@ export default async function HomePage({ searchParams }: { searchParams: Promise
   params.set("page", String(page));
   params.set("page_size", String(PAGE_SIZE));
 
-  const [data, categories, sources] = await Promise.all([
+  const [data, categories, sources, terms] = await Promise.all([
     apiGet<ArticlePage>(`/api/articles?${params}`),
     apiGet<Category[]>("/api/categories"),
     apiGet<Source[]>("/api/sources"),
+    apiGet<string[]>("/api/highlight-terms"),
   ]);
   const totalPages = Math.max(1, Math.ceil(data.total / data.page_size));
 
@@ -84,10 +87,13 @@ export default async function HomePage({ searchParams }: { searchParams: Promise
                   Kaynağa git: {a.source.name} ↗
                 </a>
               </div>
+              <Link href={`/haber/${a.id}`} className="box-image-link" tabIndex={-1}>
+                <NewsImage src={a.image_url} className="box-image" />
+              </Link>
               <div className="box-body">
-                <h2><Link href={`/haber/${a.id}`}>{a.title_tr ?? a.title_orig}</Link></h2>
-                <p className="orig-title" dir="auto">{a.title_orig}</p>
-                <p className="box-excerpt">{a.excerpt_tr}</p>
+                <h2><Link href={`/haber/${a.id}`}><Highlight text={a.title_tr ?? a.title_orig} terms={terms} /></Link></h2>
+                <p className="orig-title" dir="auto"><Highlight text={a.title_orig} terms={terms} /></p>
+                <p className="box-excerpt"><Highlight text={a.excerpt_tr} terms={terms} /></p>
               </div>
             </li>
           ))}

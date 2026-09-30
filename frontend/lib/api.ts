@@ -11,6 +11,7 @@ export type ArticleSummary = {
   title_orig: string;
   title_tr: string | null;
   excerpt_tr: string;
+  image_url: string | null;
   source: Source;
   category: Category | null;
 };
@@ -28,6 +29,7 @@ export type ArticleDetail = {
   key_points_tr: string[];
   tags: string[];
   translator: "claude" | "free" | null;
+  image_url: string | null;
   source: Source;
   category: Category | null;
 };

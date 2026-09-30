@@ -7,7 +7,7 @@ from fastapi import Depends, FastAPI, Header, HTTPException, Query
 from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
 
-from . import pipeline
+from . import keywords, pipeline
 from .budget import budget_status
 from .config import get_settings
 from .ai import active_translator_name
@@ -71,6 +71,7 @@ def _summary(a: Article) -> ArticleSummary:
         title_orig=a.title_orig,
         title_tr=a.title_tr,
         excerpt_tr=_excerpt(a.summary_tr),
+        image_url=a.image_url or None,
         source=SourcePublic.model_validate(a.source),
         category=CategoryOut.model_validate(a.category) if a.category else None,
     )
@@ -142,9 +143,15 @@ def get_article(article_id: int, session: Session = Depends(get_session)):
         key_points_tr=[p for p in (a.key_points_tr or "").split("\n") if p.strip()],
         tags=[t.strip() for t in (a.tags or "").split(",") if t.strip()],
         translator=a.translator,
+        image_url=a.image_url or None,
         source=SourcePublic.model_validate(a.source),
         category=CategoryOut.model_validate(a.category) if a.category else None,
     )
+
+
+@app.get("/api/highlight-terms", response_model=list[str])
+def highlight_terms():
+    return keywords.highlight_terms()
 
 
 @app.get("/api/categories", response_model=list[CategoryOut])

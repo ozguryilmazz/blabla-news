@@ -53,6 +53,8 @@ class Article(Base):
     # Tam orijinal metin yalnızca iç analiz içindir, herkese açık API'de dönmez
     content_orig: Mapped[str | None] = mapped_column(Text)
     excerpt_orig: Mapped[str | None] = mapped_column(Text)
+    # Kaynaktaki haber görseli; "" = arandı, bulunamadı
+    image_url: Mapped[str | None] = mapped_column(String(1000))
 
     title_tr: Mapped[str | None] = mapped_column(Text)
     summary_tr: Mapped[str | None] = mapped_column(Text)

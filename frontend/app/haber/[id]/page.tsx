@@ -1,6 +1,8 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ArticleDetail, COUNTRY_NAMES, formatDate, LANGUAGE_NAMES } from "@/lib/api";
+import NewsImage from "@/components/NewsImage";
+import { apiGet, ArticleDetail, COUNTRY_NAMES, formatDate, LANGUAGE_NAMES } from "@/lib/api";
+import { Highlight } from "@/lib/highlight";
 
 const API_URL = process.env.API_URL || "http://localhost:8000";
 
@@ -13,7 +15,7 @@ async function getArticle(id: string): Promise<ArticleDetail | null> {
 
 export default async function ArticlePage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const a = await getArticle(id);
+  const [a, terms] = await Promise.all([getArticle(id), apiGet<string[]>("/api/highlight-terms")]);
   if (!a) notFound();
 
   const rtl = a.source.language === "he";
@@ -31,8 +33,9 @@ export default async function ArticlePage({ params }: { params: Promise<{ id: st
       <div className="side-by-side">
         <section className="pane pane-orig" dir={rtl ? "rtl" : "ltr"} lang={a.source.language}>
           <h3 className="pane-label" dir="ltr">Orijinal ({LANGUAGE_NAMES[a.source.language] ?? a.source.language})</h3>
-          <h1>{a.title_orig}</h1>
-          {a.excerpt_orig && <p className="excerpt">{a.excerpt_orig}</p>}
+          <NewsImage src={a.image_url} className="detail-image" />
+          <h1><Highlight text={a.title_orig} terms={terms} /></h1>
+          {a.excerpt_orig && <p className="excerpt"><Highlight text={a.excerpt_orig} terms={terms} /></p>}
           <p dir="ltr">
             <a href={a.url} target="_blank" rel="noopener noreferrer" className="source-link">
               Haberin tamamı: {a.source.name} ↗
@@ -42,12 +45,12 @@ export default async function ArticlePage({ params }: { params: Promise<{ id: st
 
         <section className="pane pane-tr" lang="tr">
           <h3 className="pane-label">{a.translator === "free" ? "Türkçe çeviri (giriş bölümü)" : "Türkçe özet"}</h3>
-          <h1>{a.title_tr}</h1>
-          {a.summary_tr?.split("\n").filter(Boolean).map((para, i) => <p key={i}>{para}</p>)}
+          <h1><Highlight text={a.title_tr} terms={terms} /></h1>
+          {a.summary_tr?.split("\n").filter(Boolean).map((para, i) => <p key={i}><Highlight text={para} terms={terms} /></p>)}
           {a.key_points_tr.length > 0 && (
             <>
               <h4>Öne çıkanlar</h4>
-              <ul>{a.key_points_tr.map((p, i) => <li key={i}>{p}</li>)}</ul>
+              <ul>{a.key_points_tr.map((p, i) => <li key={i}><Highlight text={p} terms={terms} /></li>)}</ul>
             </>
           )}
           {a.translator === "free" && (

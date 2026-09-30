@@ -39,6 +39,9 @@ KEYWORDS: dict[str, list[str]] = {
     ],
 }
 
+# Türkçe metinlerde vurgulanacak kökler (ön elemede kullanılmaz; normalize edilmiş biçimde)
+TURKISH_HIGHLIGHT = ["turk", "erdogan", "ankara", "istanbul", "fidan", "mavi vatan"]
+
 ALL_KEYWORDS = sorted({k for words in KEYWORDS.values() for k in words})
 
 
@@ -59,3 +62,8 @@ def is_candidate(*texts: str | None) -> bool:
 def count_occurrences(*texts: str | None) -> int:
     haystack = normalize(" ".join(t for t in texts if t))
     return sum(haystack.count(k) for k in ALL_KEYWORDS)
+
+
+def highlight_terms() -> list[str]:
+    """Sitede kırmızı kalın gösterilecek kökler: tüm dillerin anahtar kelimeleri ve Türkçe karşılıkları."""
+    return sorted(set(ALL_KEYWORDS) | set(TURKISH_HIGHLIGHT), key=len, reverse=True)

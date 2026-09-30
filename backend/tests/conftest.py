@@ -11,7 +11,7 @@ from sqlalchemy.pool import StaticPool
 
 from app import db
 from app.ai import AIError, RelevanceResult, RewriteResult, Usage
-from app.collector import FeedEntry
+from app.collector import ArticleContent, FeedEntry
 from app.db import Base
 from app.seed import seed
 
@@ -42,18 +42,21 @@ def session(engine):
 class FakeFetcher:
     """Kaynak URL'si → haber listesi; makale URL'si → metin."""
 
-    def __init__(self, feeds=None, texts=None, failing=()):
+    def __init__(self, feeds=None, texts=None, failing=(), images=None):
         self.feeds = feeds or {}
         self.texts = texts or {}
+        self.images = images or {}
         self.failing = set(failing)
+        self.article_fetches = []
 
     def fetch_feed(self, url):
         if url in self.failing:
             raise RuntimeError("bağlantı hatası")
         return self.feeds.get(url, [])
 
-    def fetch_article_text(self, url):
-        return self.texts.get(url)
+    def fetch_article(self, url):
+        self.article_fetches.append(url)
+        return ArticleContent(self.texts.get(url), self.images.get(url))
 
 
 class FakeAI:
@@ -82,5 +85,5 @@ class FakeAI:
         )
 
 
-def entry(url, title, summary=""):
-    return FeedEntry(url=url, title=title, summary=summary, published_at=datetime(2026, 9, 20, tzinfo=timezone.utc))
+def entry(url, title, summary="", image_url=None):
+    return FeedEntry(url=url, title=title, summary=summary, published_at=datetime(2026, 9, 20, tzinfo=timezone.utc), image_url=image_url)

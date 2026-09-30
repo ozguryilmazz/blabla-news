@@ -52,6 +52,7 @@ class ArticleSummary(BaseModel):
     title_orig: str
     title_tr: str | None
     excerpt_tr: str
+    image_url: str | None
     source: SourcePublic
     category: CategoryOut | None
 
@@ -67,6 +68,7 @@ class ArticleDetail(BaseModel):
     key_points_tr: list[str]
     tags: list[str]
     translator: str | None
+    image_url: str | None
     source: SourcePublic
     category: CategoryOut | None
 

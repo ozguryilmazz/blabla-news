@@ -67,15 +67,21 @@ def collect(session: Session, fetcher, run: ScanRun) -> None:
         source.last_error = None
 
         for entry in entries[:max_items]:
-            if session.scalar(select(Article.id).where(Article.url == entry.url)):
+            existing = session.scalar(select(Article).where(Article.url == entry.url))
+            if existing is not None:
+                # Görsel özelliğinden önce kaydedilen yayınlanmış haberlerin görseli bir kez tamamlanır
+                if existing.image_url is None and existing.status == "published":
+                    existing.image_url = entry.image_url or fetcher.fetch_article(entry.url).image_url or ""
                 continue
-            text = fetcher.fetch_article_text(entry.url) or entry.summary
+            page = fetcher.fetch_article(entry.url)
+            text = page.text or entry.summary
             article = Article(
                 source_id=source.id,
                 url=entry.url,
                 published_at=entry.published_at or datetime.now(timezone.utc),
                 title_orig=entry.title,
                 excerpt_orig=make_excerpt(entry.summary or text or ""),
+                image_url=entry.image_url or page.image_url or "",
             )
             if keywords.is_candidate(entry.title, entry.summary, text):
                 article.status = "pending"

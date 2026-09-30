@@ -46,7 +46,7 @@ def get_session() -> Iterator[Session]:
 
 
 # create_all mevcut tablolara sütun eklemez; sonradan eklenen sütunlar burada tamamlanır
-_ADDED_COLUMNS = [("articles", "translator", "VARCHAR(20)")]
+_ADDED_COLUMNS = [("articles", "translator", "VARCHAR(20)"), ("articles", "image_url", "VARCHAR(1000)")]
 
 
 def upgrade_schema(engine) -> None:

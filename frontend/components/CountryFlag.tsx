@@ -30,7 +30,7 @@ function IsraeliFlag() {
       <rect width="100%" height="100%" fill="#fff" />
       <rect y="9.4%" width="100%" height="15.6%" fill={IL_BLUE} />
       <rect y="75%" width="100%" height="15.6%" fill={IL_BLUE} />
-      <svg x="78%" y="50%" overflow="visible">
+      <svg x="50%" y="50%" overflow="visible">
         <polygon points={up} fill="none" stroke={IL_BLUE} strokeWidth="2.6" />
         <polygon points={down} fill="none" stroke={IL_BLUE} strokeWidth="2.6" />
       </svg>
