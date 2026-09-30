@@ -71,6 +71,17 @@ def lead_paragraphs(text: str, limit: int = LEAD_CHARS) -> str:
     return "\n".join(out)
 
 
+def relevant_lead(text: str) -> str:
+    """Giriş bölümü; Türkiye girişte geçmiyorsa, geçtiği ilk paragraf da eklenir ki özet konuyu içersin."""
+    lead = lead_paragraphs(text)
+    if keywords.is_candidate(lead):
+        return lead
+    for p in (x.strip() for x in text.split("\n")):
+        if p and p not in lead and keywords.is_candidate(p):
+            return f"{lead}\n{p[:LEAD_CHARS]}"
+    return lead
+
+
 def _pieces(paragraph: str, fits) -> list[str]:
     """Bir paragrafı `fits` sınırını aşmayan parçalara böler; önce cümle, sonra kelime sınırından."""
     units: list[str] = []
@@ -264,7 +275,7 @@ class FreeTranslator:
 
     def rewrite(self, title: str, text: str, language: str, source_name: str) -> RewriteResult:
         title_tr = self.translate(title, language)
-        summary_tr = self.translate(lead_paragraphs(text or ""), language)
+        summary_tr = self.translate(relevant_lead(text or ""), language)
         matched = keywords.matched_keywords(title, text)
         tags = list(dict.fromkeys(KEYWORD_TAGS[k] for k in matched if k in KEYWORD_TAGS))
         return RewriteResult(title_tr=title_tr, summary_tr=summary_tr, key_points=[], tags=tags)

@@ -1,9 +1,11 @@
 import logging
+import re
 import secrets
 from contextlib import asynccontextmanager
 from datetime import date, datetime, time, timezone
 
-from fastapi import Depends, FastAPI, Header, HTTPException, Query
+import httpx
+from fastapi import Depends, FastAPI, Header, HTTPException, Query, Response
 from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
 
@@ -58,9 +60,24 @@ def require_admin(x_admin_password: str = Header(default="")) -> None:
         raise HTTPException(status_code=401, detail="Yönetici şifresi hatalı")
 
 
+_SENTENCE_RE = re.compile(r"(?<=[.!?…])\s+|\n+")
+
+
 def _excerpt(text: str | None, limit: int = 240) -> str:
+    """Kutudaki kısa özet: Türkiye ile ilgili ilk cümleden başlar; yoksa metnin başından."""
     text = (text or "").strip()
-    return text if len(text) <= limit else text[:limit].rsplit(" ", 1)[0] + "…"
+    sentences = [x for x in _SENTENCE_RE.split(text) if x.strip()]
+    terms = keywords.highlight_terms()
+    start = next((i for i, x in enumerate(sentences) if any(t in keywords.normalize(x) for t in terms)), 0)
+    body = " ".join(sentences[start:])
+    if len(body) > limit:
+        body = body[:limit].rsplit(" ", 1)[0] + "…"
+    return ("… " if start else "") + body
+
+
+def _image_path(a: Article) -> str | None:
+    # Görsel kaynak siteden arka uç üzerinden getirilir (siteler doğrudan bağlantıyı engelleyebiliyor)
+    return f"/api/image/{a.id}" if a.image_url else None
 
 
 def _summary(a: Article) -> ArticleSummary:
@@ -71,7 +88,7 @@ def _summary(a: Article) -> ArticleSummary:
         title_orig=a.title_orig,
         title_tr=a.title_tr,
         excerpt_tr=_excerpt(a.summary_tr),
-        image_url=a.image_url or None,
+        image_url=_image_path(a),
         source=SourcePublic.model_validate(a.source),
         category=CategoryOut.model_validate(a.category) if a.category else None,
     )
@@ -143,10 +160,39 @@ def get_article(article_id: int, session: Session = Depends(get_session)):
         key_points_tr=[p for p in (a.key_points_tr or "").split("\n") if p.strip()],
         tags=[t.strip() for t in (a.tags or "").split(",") if t.strip()],
         translator=a.translator,
-        image_url=a.image_url or None,
+        image_url=_image_path(a),
         source=SourcePublic.model_validate(a.source),
         category=CategoryOut.model_validate(a.category) if a.category else None,
     )
+
+
+_image_client: httpx.Client | None = None
+MAX_IMAGE_BYTES = 5_000_000
+
+
+def image_client() -> httpx.Client:
+    global _image_client
+    if _image_client is None:
+        from .collector import BROWSER_HEADERS
+
+        headers = {**BROWSER_HEADERS, "Accept": "image/avif,image/webp,image/*,*/*;q=0.8"}
+        _image_client = httpx.Client(timeout=15, follow_redirects=True, headers=headers)
+    return _image_client
+
+
+@app.get("/api/image/{article_id}")
+def article_image(article_id: int, session: Session = Depends(get_session)):
+    a = session.get(Article, article_id)
+    if a is None or a.status != "published" or not a.image_url:
+        raise HTTPException(status_code=404, detail="Görsel yok")
+    try:
+        r = image_client().get(a.image_url, headers={"Referer": a.url})
+    except httpx.HTTPError:
+        raise HTTPException(status_code=502, detail="Görsel alınamadı")
+    kind = r.headers.get("content-type", "")
+    if r.status_code != 200 or not kind.startswith("image/") or len(r.content) > MAX_IMAGE_BYTES:
+        raise HTTPException(status_code=502, detail="Görsel alınamadı")
+    return Response(r.content, media_type=kind, headers={"Cache-Control": "public, max-age=86400"})
 
 
 @app.get("/api/highlight-terms", response_model=list[str])
@@ -170,6 +216,9 @@ def list_sources(session: Session = Depends(get_session)):
 @app.get("/api/admin/status", response_model=AdminStatus, dependencies=[Depends(require_admin)])
 def admin_status(session: Session = Depends(get_session)):
     counts = dict(session.execute(select(Article.status, func.count()).group_by(Article.status)).all())
+    counts["with_image"] = session.scalar(
+        select(func.count()).where(Article.status == "published", Article.image_url.is_not(None), Article.image_url != "")
+    )
     runs = session.scalars(select(ScanRun).order_by(ScanRun.id.desc()).limit(10)).all()
     return AdminStatus(
         paused=pipeline.is_paused(session),

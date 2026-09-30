@@ -10,6 +10,7 @@ type Category = { id: number; slug: string; name: string; scan_enabled: boolean 
 
 const STATUS_NAMES: Record<string, string> = {
   published: "Yayında",
+  with_image: "Görselli",
   pending: "Bekliyor",
   irrelevant: "İlgisiz",
   skipped_category: "Kategori kapalı",

@@ -68,3 +68,42 @@ def test_api_exposes_image_and_terms(client, session):
     terms = client.get("/api/highlight-terms").json()
     assert "turk" in terms and "τουρκ" in terms and "טורקי" in terms
     assert terms == highlight_terms()
+
+
+def test_excerpt_starts_at_turkey_sentence():
+    from app.main import _excerpt
+
+    text = "Bir futbol maçı oynandı. Hava güzeldi. Türkiye'den gelen taraftarlar da oradaydı. Maç 2-2 bitti."
+    assert _excerpt(text).startswith("… Türkiye'den gelen")
+    assert _excerpt("Erdoğan konuştu. Başka şeyler.").startswith("Erdoğan konuştu.")
+    assert _excerpt("Hiç ilgisi yok. Gerçekten.") == "Hiç ilgisi yok. Gerçekten."
+
+
+def test_relevant_lead_adds_turkey_paragraph():
+    from app.free_translate import relevant_lead
+
+    text = "\n".join(["Ποδόσφαιρο και γκολ σήμερα." * 10] * 10 + ["Η Τουρκία αντέδρασε έντονα."])
+    out = relevant_lead(text)
+    assert out.endswith("Η Τουρκία αντέδρασε έντονα.") and len(out) < 1700
+
+
+def test_image_proxy(client, session, monkeypatch):
+    import httpx
+
+    from app import main
+
+    tov = "https://www.timesofisrael.com/feed/"
+    _only(session, tov)
+    run_scan(db.session_factory, FakeFetcher(feeds={tov: [entry("https://t/a", "Erdogan", image_url="https://img/x.jpg")]}, texts={}), FakeAI())
+    seen = []
+
+    def handler(request):
+        seen.append(request.headers.get("referer"))
+        return httpx.Response(200, content=b"JPEG", headers={"content-type": "image/jpeg"})
+
+    monkeypatch.setattr(main, "_image_client", httpx.Client(transport=httpx.MockTransport(handler)))
+    item = client.get("/api/articles").json()["items"][0]
+    assert item["image_url"] == f"/api/image/{item['id']}"
+    r = client.get(item["image_url"])
+    assert r.status_code == 200 and r.content == b"JPEG" and seen == ["https://t/a"]
+    assert client.get("/api/admin/status", headers={"X-Admin-Password": main.get_settings().admin_password}).json()["counts"]["with_image"] == 1
