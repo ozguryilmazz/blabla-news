@@ -39,8 +39,15 @@ SOURCES = [
     ("Israel Hayom (İngilizce)", "IL", "en", "https://www.israelhayom.com/feed/"),
     ("Times of Israel", "IL", "en", "https://www.timesofisrael.com/feed/"),
     ("Jerusalem Post", "IL", "en", "https://www.jpost.com/rss/rssfeedsfrontpage.aspx"),
-    ("i24News", "IL", "en", "https://www.i24news.tv/en/rss"),
+    ("in.gr", "GR", "el", "https://www.in.gr/feed/"),
+    ("iefimerida", "GR", "el", "https://www.iefimerida.gr/rss.xml"),
+    ("Walla", "IL", "he", "https://rss.walla.co.il/feed/1"),
 ]
+
+# Artık çalışmayan adresler; kurulu sistemlerde kapatılır
+RETIRED_URLS = {
+    "https://www.i24news.tv/en/rss",  # RSS değil, sitenin ana sayfasını döndürüyor
+}
 
 
 def seed(session: Session) -> None:
@@ -53,5 +60,7 @@ def seed(session: Session) -> None:
     for name, country, language, url in SOURCES:
         if url not in existing_urls:
             session.add(Source(name=name, country=country, language=language, url=url))
+    for source in session.scalars(select(Source).where(Source.url.in_(RETIRED_URLS))):
+        source.active = False
 
     session.commit()
